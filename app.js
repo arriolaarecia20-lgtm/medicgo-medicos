@@ -277,11 +277,16 @@ function shell() {
 // Vistas y controles específicos de cada página.
 function access() {
     app.innerHTML = `<main class="login">
+<div class="access-collage" aria-hidden="true">
+<div class="collage-photo"><img src="assets/medica-clinica.jpg" alt="" width="1100" height="1650"></div>
+<div class="collage-photo"><img src="assets/profesional-5998482.jpg" alt="" width="700" height="1049"></div>
+<div class="collage-photo"><img src="assets/profesional-5327585.jpg" alt="" width="700" height="1050"></div>
+<div class="collage-photo"><img src="assets/profesional-5452293.jpg" alt="" width="700" height="1050"></div>
+</div>
 <section class="login-story">${brand}<a class="access-shortcut" href="#access-form">Ir al acceso ${icon('arrow')}</a><div class="eyebrow story-eyebrow">Más orden. Mejor atención.</div>
 <h1>Tu día médico,<br><span>en un solo lugar</span></h1>
 <p>Organiza tus solicitudes, consulta tu agenda y define tus horarios de atención.</p>
-<div class="login-visual">
-<div class="photo-frame"><img src="assets/medica-clinica.jpg" width="1100" height="1650" alt="Profesional médica con bata blanca y estetoscopio en un ambiente clínico luminoso" fetchpriority="high"></div>
+<div class="access-benefits">
 <div class="floating-card agenda-card"><span>${icon('calendar')}</span><strong>Tu agenda organizada</strong></div>
 <div class="floating-card requests-card"><span>${icon('requests')}</span><strong>Gestiona tus solicitudes</strong></div>
 </div>
