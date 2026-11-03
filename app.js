@@ -277,27 +277,36 @@ function shell() {
 // Vistas y controles específicos de cada página.
 function access() {
     app.innerHTML = `<main class="login">
-<section class="login-story">${brand}<div class="eyebrow" style="margin-top:55px">Más orden. Mejor atención.</div>
-<h1>Tu día médico,<br>en un solo lugar.</h1>
+<section class="login-story">${brand}<a class="access-shortcut" href="#access-form">Ir al acceso ${icon('arrow')}</a><div class="eyebrow story-eyebrow">Más orden. Mejor atención.</div>
+<h1>Tu día médico,<br><span>en un solo lugar</span></h1>
 <p>Organiza tus solicitudes, consulta tu agenda y define tus horarios de atención.</p>
 <div class="login-visual">
-<div class="avatar">${icon('calendar')}</div>
-<div><strong>Una agenda a tu ritmo</strong><br><span class="muted">Todo listo para tu próxima visita.</span>
-</div>
+<div class="photo-frame"><img src="assets/medica-clinica.jpg" width="1100" height="1650" alt="Profesional médica con bata blanca y estetoscopio en un ambiente clínico luminoso" fetchpriority="high"></div>
+<div class="floating-card agenda-card"><span>${icon('calendar')}</span><strong>Tu agenda organizada</strong></div>
+<div class="floating-card requests-card"><span>${icon('requests')}</span><strong>Gestiona tus solicitudes</strong></div>
 </div>
 </section>
 <section class="login-panel">
+<div class="access-mark" aria-hidden="true">${icon('plus')}</div>
 <div class="eyebrow">Bienvenido a Medic GO</div>
 <h1>Entra a tu portal médico</h1>
 <p class="muted">Selecciona tu perfil para consultar las visitas y organizar tu jornada.</p>
 <form id="access-form">
 <label class="field">Médico<select id="doctor">${doctors.map(d => `<option value="${d.id}" ${d.id === selected ? 'selected' : ''}>${d.name} · ${d.specialty}</option>`).join('')}</select>
 </label>
+<div class="selected-doctor" aria-live="polite" aria-atomic="true"></div>
 <button class="btn" type="submit">Entrar al panel ${icon('arrow')}</button>
 </form>
 <footer class="footer">Proyecto académico · Datos de ejemplo</footer>
 </section>
 </main>`;
+    const selector = document.querySelector('#doctor');
+    const updateProfile = () => {
+        const profile = doctors.find(d => d.id === selector.value);
+        document.querySelector('.selected-doctor').innerHTML = `<div class="avatar" aria-hidden="true">${profile.initials}</div><div><small>Perfil seleccionado</small><strong>${profile.name}</strong><span>${profile.specialty}</span></div>${icon('check')}`;
+    };
+    selector.addEventListener('change', updateProfile);
+    updateProfile();
     document.querySelector('form').onsubmit = e => {
         e.preventDefault();
         try {

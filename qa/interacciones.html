@@ -1,0 +1,171 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8">
+    <base href="../">
+    <title>Verificación del portal</title>
+  </head>
+  <body>
+    <pre id="report">Ejecutando pruebas…</pre>
+    <iframe id="portal" style="width:100%;height:900px;border:0" title="Portal en pruebas"></iframe>
+    <script>
+      (async () => {
+          const frame = document.querySelector('#portal'), results = [];
+          const check = (condition, message) => {
+              if (!condition)
+                  throw Error(message);
+              results.push('OK · ' + message);
+          };
+          const load = (page) => new Promise((resolve, reject) => {
+              frame.onload = () => resolve(frame.contentWindow);
+              frame.onerror = reject;
+              frame.src = page;
+          });
+          const $ = selector => frame.contentDocument.querySelector(selector);
+          const click = selector => {
+              const el = $(selector);
+              check(!!el, 'Existe ' + selector);
+              el.click();
+          };
+          const change = (selector, value) => {
+              const el = $(selector);
+              el.value = value;
+              el.dispatchEvent(new Event('change'));
+          };
+          const dataKey = 'medicgo-medicos:data:v1';
+          const selectionKey = 'medicgo-medicos:selected:v1';
+          const backup = [dataKey, selectionKey].map(key => [key, localStorage.getItem(key)]);
+          try {
+              localStorage.setItem('medicgo-medicos:selected:v1', 'm1');
+              let w = await load('solicitudes.html?estado=pendiente');
+              const originalOther = w.eval('JSON.stringify(data.visits.filter(v=>v.doctor!==doctor.id))');
+              check($('a.active').getAttribute('href') === 'solicitudes.html', 'Menú activo de solicitudes');
+              check($('#request-status').value === 'pendiente', 'Filtro de pendientes aplicado');
+              w.eval(`own()[0].date=relative(-1); data.schedules[doctor.id][parseDate(relative(-1)).getDay()].blocks=[{start:'00:00',end:'23:59'}];save()`);
+              const id = w.eval('own()[0].id');
+              w.detail(id);
+              click('#accept');
+              check(w.eval('own()[0].status') === 'pendiente', 'Aceptar pide confirmación');
+              click('#confirm');
+              check(w.eval('own()[0].status') === 'aceptada', 'Pendiente pasa a aceptada');
+              const date = w.eval('own()[0].date');
+              w = await load('agenda.html?fecha=' + date);
+              check($('#calendar').textContent.includes(id), 'Visita aceptada visible en agenda');
+              change('#agenda-mode', 'week');
+              check(frame.contentDocument.querySelectorAll('.day').length === 7, 'Vista semanal con siete días');
+              const before = $('#agenda-date').value;
+              click('#next');
+              check($('#agenda-date').value !== before, 'Cambio de semana');
+              click('#prev');
+              check($('#agenda-date').value === before, 'Volver a la semana anterior');
+              click('#today');
+              w.detail(id);
+              click('#complete');
+              click('#confirm');
+              check(w.eval('own()[0].status') === 'completada', 'Aceptada pasa a completada');
+              w = await load('historial.html?estado=completada');
+              check($('#history-table').textContent.includes(id), 'Completada visible tras recargar historial');
+              change('#from', '2099-01-01');
+              check(!!$('.empty'), 'Filtro de fechas con estado vacío');
+              click('#clear');
+              check($('#from').value === '' && $('#history-status').value === 'closed', 'Limpiar filtros');
+              w = await load('solicitudes.html');
+              const rejectId = w.eval('own()[1].id');
+              w.detail(rejectId);
+              click('#reject');
+              $('#reject-reason').value = 'Agenda completa';
+              click('#confirm');
+              check(w.eval('own()[1].status') === 'rechazada' && w.eval('own()[1].reason') === 'Agenda completa', 'Rechazo con motivo guardado');
+              const cancelId = w.eval('own()[3].id');
+              w.detail(cancelId);
+              click('#cancel-visit');
+              click('#cancel');
+              check(w.eval('own()[3].status') === 'aceptada', 'Volver conserva la visita aceptada');
+              w.detail(cancelId);
+              click('#cancel-visit');
+              click('#confirm');
+              check(w.eval('own()[3].status') === 'cancelada', 'Cancelación confirmada');
+              check(!w.eval('agendaVisits([own()[3].date]).some(v=>v.id===own()[3].id)'), 'Cancelada deja la agenda y libera el horario');
+              w.eval('own()[2].date=own()[3].date;own()[2].time=own()[3].time;save()');
+              w.detail(w.eval('own()[2].id'));
+              click('#accept');
+              click('#confirm');
+              check(w.eval('own()[2].status') === 'aceptada', 'Horario liberado permite aceptar otra visita');
+              w = await load('disponibilidad.html');
+              const count = w.eval('data.schedules[doctor.id][1].blocks.length');
+              $('#block-day').value = '1';
+              $('#block-start').value = '08:00';
+              $('#block-end').value = '09:00';
+              $('#block-form').requestSubmit();
+              check(w.eval('scheduleDraft[1].blocks.length') === count, 'Bloque superpuesto bloqueado');
+              $('#block-start').value = '20:00';
+              $('#block-end').value = '21:00';
+              $('#block-form').requestSubmit();
+              check(w.eval('scheduleDraft[1].blocks.length') === count + 1, 'Agregar bloque al borrador');
+              click('#save-schedule');
+              check(w.eval('data.schedules[doctor.id][1].blocks.length') === count + 1, 'Guardar disponibilidad');
+              w = await load('disponibilidad.html');
+              check(w.eval('data.schedules[doctor.id][1].blocks.length') === count + 1, 'Disponibilidad persiste al recargar');
+              const remove = frame.contentDocument.querySelector('[data-remove="1,' + count + '"]');
+              remove.click();
+              click('#discard-schedule');
+              check(w.eval('scheduleDraft[1].blocks.length') === count + 1, 'Descartar recupera horarios');
+              // Un bloque que cubre una visita exige confirmación antes de guardarse.
+              const accepted = w.eval('own().find(v=>v.status==="aceptada"&&v.date>=relative(0))');
+              const affectedDay = w.eval(`parseDate('${accepted.date}').getDay()`);
+              const affectedIndex = w.eval(`data.schedules[doctor.id][${affectedDay}].blocks.findIndex(b=>minutes('${accepted.time}')>=minutes(b.start)&&minutes('${accepted.time}')+30<=minutes(b.end))`);
+              frame.contentDocument.querySelector(`[data-remove="${affectedDay},${affectedIndex}"]`).click();
+              click('#save-schedule');
+              check($('#modal').open, 'Cambio de disponibilidad advierte sobre visitas aceptadas');
+              click('#cancel');
+              check(w.eval(`data.schedules[doctor.id][${affectedDay}].blocks.length>scheduleDraft[${affectedDay}].blocks.length`), 'Volver conserva la disponibilidad guardada');
+              click('#discard-schedule');
+              check(w.eval('JSON.stringify(data.visits.filter(v=>v.doctor!==doctor.id))') === originalOther, 'Cambios no afectan a otros médicos');
+              w = await load('resumen.html');
+              check(frame.contentDocument.querySelectorAll('.stat[href]').length === 4, 'Cuatro indicadores navegables');
+              for (const link of frame.contentDocument.querySelectorAll('.stat')) {
+                  const url = link.getAttribute('href');
+                  const response = await fetch(url);
+                  check(response.ok, 'Destino de indicador ' + url);
+              }
+              const saved = localStorage.getItem('medicgo-medicos:data:v1');
+              click('#logout');
+              await new Promise(resolve => {
+                  frame.onload = resolve;
+              });
+              check(frame.contentWindow.location.pathname.endsWith('/index.html'), 'Salir vuelve al acceso');
+              check(localStorage.getItem('medicgo-medicos:data:v1') === saved, 'Salir no borra los datos');
+              $('#doctor').value = 'm2';
+              $('#access-form').requestSubmit();
+              await new Promise(resolve => {
+                  frame.onload = resolve;
+              });
+              check(frame.contentWindow.eval('own().every(v=>v.doctor==="m2")'), 'Acceso con segundo médico conserva aislamiento');
+              w = frame.contentWindow;
+              const secondSchedule = w.eval('JSON.stringify(data.schedules[doctor.id])');
+              const logoutNavigation = new Promise(resolve => { frame.onload = resolve; });
+              click('#logout');
+              await logoutNavigation;
+              $('#doctor').value = 'm3';
+              const thirdNavigation = new Promise(resolve => { frame.onload = resolve; });
+              $('#access-form').requestSubmit();
+              await thirdNavigation;
+              check(frame.contentWindow.eval('own().every(v=>v.doctor==="m3")'), 'Acceso con tercer médico conserva aislamiento');
+              check(frame.contentWindow.eval('JSON.stringify(data.schedules.m2)') === secondSchedule, 'Horarios independientes del segundo médico');
+              document.querySelector('#report').textContent = 'PASS · ' + results.length + ' verificaciones\n' + results.join('\n');
+          }
+          catch (error) {
+              document.querySelector('#report').textContent = 'FAIL · ' + error.stack + '\n' + results.join('\n');
+          }
+          finally {
+              // Restaura exactamente los valores iniciales incluso si una prueba falla.
+              for (const [key, value] of backup) {
+                  if (value === null) localStorage.removeItem(key);
+                  else localStorage.setItem(key, value);
+              }
+          }
+      })();
+      
+    </script>
+  </body>
+</html>
